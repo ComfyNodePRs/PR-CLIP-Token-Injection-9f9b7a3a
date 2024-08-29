@@ -11,11 +11,15 @@ Four nodes:
 
 ## CLIP token injection:
 
+![image](https://github.com/user-attachments/assets/e2dc0f4e-3490-402d-b982-0aa4b45788bf)
+
 Here the word "woman" is targeted. The token weight corresponding to will become:
 
 "woman" + ((("pretty beautiful happy" - "woman") * positive slider) - (("evil creepy old" - "woman") * negative slider)) * both_strengths_multiplier
 
-![image](https://github.com/user-attachments/assets/e2dc0f4e-3490-402d-b982-0aa4b45788bf)
+The effect will become permanent if the clip model is saved.
+
+So far compatible with sd1.x, sd2 and SDXL.
 
 Base image / Happy and stuff / In the third one I switched the positive with the negative text:
 
