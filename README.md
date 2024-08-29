@@ -17,7 +17,7 @@ Here the word "woman" is targeted. The token weight corresponding to it will bec
 
 "woman" + ((("pretty beautiful happy" - "woman") * positive slider) - (("evil creepy old" - "woman") * negative slider)) * both_strengths_multiplier
 
-The effect will become permanent if the clip model is saved.
+The effect will become permanent if the clip model is saved. Every "woman" will become pretty beautiful and happy. What else do you want?
 
 So far compatible with sd1.x, sd2 and SDXL.
 
