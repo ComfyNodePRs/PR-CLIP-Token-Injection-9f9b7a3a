@@ -13,7 +13,7 @@ Four nodes:
 
 ![image](https://github.com/user-attachments/assets/e2dc0f4e-3490-402d-b982-0aa4b45788bf)
 
-Here the word "woman" is targeted. The token weight corresponding to will become:
+Here the word "woman" is targeted. The token weight corresponding to it will become:
 
 "woman" + ((("pretty beautiful happy" - "woman") * positive slider) - (("evil creepy old" - "woman") * negative slider)) * both_strengths_multiplier
 
