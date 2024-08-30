@@ -6,13 +6,15 @@ ignored_token_ids = [49406, 49407, 0]
 # del base_clip,base_model
 # comfy.model_management.cleanup_models()
 
-def words_to_tokens_ids(clip_model, text_input):
+def words_to_tokens_ids(clip_model, text_input, allow_double=False):
     if text_input == "":
         return []
     text_input = text_input.replace(" , "," ").replace(" ,"," ").replace(", "," ").replace(","," ").replace("\n"," ")
     text_tokenized = clip_model.tokenizer.tokenize(text_input)
     text_token_ids = clip_model.tokenizer.convert_tokens_to_ids(text_tokenized)
     text_token_ids = [tti for tti in text_token_ids if tti not in ignored_token_ids]
+    if allow_double:
+        return text_token_ids
     return list(dict.fromkeys(text_token_ids))
 
 class ClipTokenLobotomyNode:
@@ -34,6 +36,7 @@ Do not chain with another similar node."
                 "text_sub": ("STRING", {"multiline": True}),
                 "strength_sub": ("FLOAT", {"default": 0.5, "min": .0, "max": 1.0, "step": 0.1}),
                 "both_strengths_multiplier": ("FLOAT", {"default": 0.5, "min": 0, "max": 100.0, "step": 0.5}),
+                "allow_doubles" : ("BOOLEAN", {"default": False, "tooltip":"Allow tokens mentionned multiple times to accumulate.\nThe target tokens remain unique."}),
                 # "apply_to_all_weights" : ("BOOLEAN", {"default": False, "tooltip":"This is a bad idea."}),
             }
         }
@@ -56,7 +59,7 @@ Do not chain with another similar node."
         return warr
 
     def exec(self, clip, target_text, text_add, strength_add, text_sub,
-             strength_sub, both_strengths_multiplier):
+             strength_sub, both_strengths_multiplier, allow_doubles):
         clip = clip.clone()
         for c, k in enumerate(["g","l"]):
             weights_pos = {}
@@ -73,8 +76,8 @@ Do not chain with another similar node."
                 cdtype = weights.dtype
 
                 target_ids = words_to_tokens_ids(clip_tokenizer,target_text)
-                ids_pos = words_to_tokens_ids(clip_tokenizer,text_add)
-                ids_neg = words_to_tokens_ids(clip_tokenizer,text_sub)
+                ids_pos = words_to_tokens_ids(clip_tokenizer,text_add,allow_doubles)
+                ids_neg = words_to_tokens_ids(clip_tokenizer,text_sub,allow_doubles)
 
                 n_pos = len(ids_pos)
                 n_neg = len(ids_neg)
@@ -113,8 +116,12 @@ Do not chain with another similar node."
                                 n_div += 1
                         p_res = p_res / max(p_div,1)
                         n_res = n_res / max(n_div,1)
-                        all_weights[t] = all_weights[t] + (p_res - n_res) * both_strengths_multiplier
-
+                        if t in weight_difs:
+                            weight_difs[t] += (p_res - n_res) * both_strengths_multiplier * max(1, p_div * strength_add - n_div * strength_sub) / 4
+                        else:
+                            weight_difs[t]  = (p_res - n_res) * both_strengths_multiplier * max(1, p_div * strength_add - n_div * strength_sub) / 4
+                    for t in target_ids:
+                        all_weights[t] = all_weights[t] + weight_difs[t]
                 cond_stage_model.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(all_weights.to(device=device,dtype=cdtype))
         return clip,
 
