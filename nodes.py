@@ -116,10 +116,11 @@ Do not chain with another similar node."
                                 n_div += 1
                         p_res = p_res / max(p_div,1)
                         n_res = n_res / max(n_div,1)
+                        # max(1, p_div * strength_add - n_div * strength_sub) / 4
                         if t in weight_difs:
-                            weight_difs[t] += (p_res - n_res) * both_strengths_multiplier * max(1, p_div * strength_add - n_div * strength_sub) / 4
+                            weight_difs[t] += (p_res - n_res) * both_strengths_multiplier
                         else:
-                            weight_difs[t]  = (p_res - n_res) * both_strengths_multiplier * max(1, p_div * strength_add - n_div * strength_sub) / 4
+                            weight_difs[t]  = (p_res - n_res) * both_strengths_multiplier
                     for t in target_ids:
                         all_weights[t] = all_weights[t] + weight_difs[t]
                 cond_stage_model.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(all_weights.to(device=device,dtype=cdtype))
