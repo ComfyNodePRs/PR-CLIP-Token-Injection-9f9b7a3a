@@ -35,7 +35,7 @@ If the same tokens are used in the target and in the positive or negative inputs
 
 For example, you may write the same words in the target and positive, and their meaning will be more diluted in between each other.
 
-The opposite is also true.
+The opposite is also true. I tested so far to bias tokens with many and the results can be great.
 
 ## CLIP take weights from another:
 
