@@ -393,20 +393,26 @@ class loadCustomTokenNode:
 
     @classmethod
     def INPUT_TYPES(s):
+        wavg = s.IS_WEIGHTED_AVERAGE
         filenames = os.listdir(weights_output_path)
         filenames = sorted(filenames, key=str.lower)
         filenames = [f.replace(".pt","") for f in filenames]
-        return {"required": {
-                "clip": ("CLIP",),
-                "filename": (filenames,),
-                "output_original": ("BOOLEAN", {"default": False}),
+        required  = {
+            "clip": ("CLIP",),
+            "filename": (filenames,)
             }
-        }
+        if not wavg:
+            required["output_original"] = ("BOOLEAN", {"default": False})
+        else:
+            required["loaded_weights_strength"] = ("FLOAT", {"default": 1, "min": -10.0, "max": 10.0, "step": 0.1})
+        return {"required": required}
+
+    IS_WEIGHTED_AVERAGE = False
     FUNCTION = "exec"
     CATEGORY = "advanced/CLIP Weights Surgery"
     RETURN_TYPES = ("CLIP",)
 
-    def exec(self, clip, filename, output_original=False):
+    def exec(self, clip, filename, output_original=True, loaded_weights_strength=0):
         file_path = os.path.join(weights_output_path, f"{filename}.pt")
         custom_weights = torch.load(file_path)
         for k in custom_weights:
@@ -422,6 +428,10 @@ class loadCustomTokenNode:
                             clip_weights[t] = self.original_weights[k][t].clone().to(device=device)
                     else:
                         self.original_weights[k][t] = clip_weights[t].clone().to(device='cpu')
+                    if loaded_weights_strength != 0:
+                        old_weight = self.original_weights[k][t].clone().to(device=device)
+                        new_weight = custom_weights[k][t].clone().to(device=device)
+                        clip_weights[t] = new_weight * loaded_weights_strength + old_weight * (1 - loaded_weights_strength)
                     if not output_original:
                         clip_weights[t] = custom_weights[k][t].clone().to(device=device)
         csm1.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(clip_weights)
@@ -434,5 +444,6 @@ NODE_CLASS_MAPPINGS = {
     "CLIP level weights": levelCLIPWeights,
     "CLIP fix nans (can be chained, best at end)": fixCLIPWeights,
     "CLIP save custom tokens": saveCustomTokenNode,
-    "CLIP load custom tokens": loadCustomTokenNode,    
+    "CLIP load custom tokens": type("loadCustomTokenNode", (loadCustomTokenNode,), { "IS_WEIGHTED_AVERAGE": False}),
+    "CLIP load custom tokens (weighted average)": type("loadCustomTokenNodeWAvg", (loadCustomTokenNode,), { "IS_WEIGHTED_AVERAGE": True}),
 }
