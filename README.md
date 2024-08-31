@@ -3,11 +3,12 @@ Manually edit CLIP token weights, results can be saved to remain permanent.
 
 Work in progress but functional!
 
+update: save/load weights. Added "scores" tags in the custom weights folder.
+
 Don't chain these nodes. Save the result after testing, restart and reload. Don't load a different model into the same node neither.
 
 (they keep the weights they receive first)
 
-Four nodes:
 
 ## CLIP token injection:
 
