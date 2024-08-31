@@ -40,6 +40,7 @@ Do not chain with another similar node."
                 "strength_sub": ("FLOAT", {"default": 0.5, "min": .0, "max": 1.0, "step": 0.1}),
                 "both_strengths_multiplier": ("FLOAT", {"default": 0.5, "min": 0, "max": 100.0, "step": 0.5}),
                 "allow_doubles" : ("BOOLEAN", {"default": False, "tooltip":"Allow tokens mentionned multiple times to accumulate.\nThe target tokens remain unique."}),
+                "auto_weights" : ("BOOLEAN", {"default": False, "tooltip":"Rebalance the average."}),
                 # "apply_to_all_weights" : ("BOOLEAN", {"default": False, "tooltip":"This is a bad idea."}),
             }
         }
@@ -62,7 +63,7 @@ Do not chain with another similar node."
         return warr
 
     def exec(self, clip, target_text, text_add, strength_add, text_sub,
-             strength_sub, both_strengths_multiplier, allow_doubles):
+             strength_sub, both_strengths_multiplier, allow_doubles, auto_weights=False):
         clip = clip.clone()
         for c, k in enumerate(["g","l"]):
             weights_pos = {}
@@ -119,11 +120,12 @@ Do not chain with another similar node."
                                 n_div += 1
                         p_res = p_res / max(p_div,1)
                         n_res = n_res / max(n_div,1)
-                        # max(1, p_div * strength_add - n_div * strength_sub) / 4
+                        
+                        balance_mult = 1 if not auto_weights else max(1, p_div * strength_add - n_div * strength_sub) / 4
                         if t in weight_difs:
-                            weight_difs[t] += (p_res - n_res) * both_strengths_multiplier
+                            weight_difs[t] += (p_res - n_res) * both_strengths_multiplier * balance_mult
                         else:
-                            weight_difs[t]  = (p_res - n_res) * both_strengths_multiplier
+                            weight_difs[t]  = (p_res - n_res) * both_strengths_multiplier * balance_mult
                     for t in target_ids:
                         all_weights[t] = all_weights[t] + weight_difs[t]
                 cond_stage_model.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(all_weights.to(device=device,dtype=cdtype))
@@ -272,7 +274,10 @@ Do not use with another similar node."
                     for g in ignored_token_ids:
                         ignored_token_weights.append(all_weights[g].clone())
                     norm_w = torch.linalg.norm(all_weights,dim=1).unsqueeze(1)
-                    all_weights = all_weights * torch.nan_to_num(norm_w.mean() / norm_w, nan=1.0)
+                    backup_nan  = all_weights.clone()
+                    all_weights = all_weights * (norm_w.mean() + 1e-16) / (norm_w + 1e-16)
+                    nan_values  = torch.isnan(all_weights)
+                    all_weights[nan_values] = backup_nan[nan_values]
                     for j, g in enumerate(ignored_token_ids):
                         all_weights[g] = ignored_token_weights[j]
 
@@ -302,6 +307,7 @@ Do not use with another similar node."
     RETURN_TYPES = ("CLIP",)
 
     def exec(self, clip_to_modify, clip_to_pick_from, target_text, output_original):
+        clip_to_modify = clip_to_modify.clone()
         for c, k in enumerate(["g","l"]):
             csm1 = getattr(clip_to_modify.cond_stage_model, f"clip_{k}", None)
             csm2 = getattr(clip_to_pick_from.cond_stage_model, f"clip_{k}", None)
@@ -339,6 +345,7 @@ class fixCLIPWeights:
     RETURN_TYPES = ("CLIP",)
 
     def exec(self, clip_to_fix, clip_doctor):
+        clip_to_fix = clip_to_fix.clone()
         for c, k in enumerate(["g","l"]):
             csm_fix = getattr(clip_to_fix.cond_stage_model, f"clip_{k}", None)
             csm_doc = getattr(clip_doctor.cond_stage_model, f"clip_{k}", None)
@@ -350,6 +357,46 @@ class fixCLIPWeights:
                 csm_fix.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(weights_fix)
         return clip_to_fix,
 
+# class saveCustomTokenNode:
+#     def __init__(self):
+#         pass
+#     @classmethod
+#     def INPUT_TYPES(s):
+#         return {"required": {
+#                 "clip": ("CLIP",),
+#                 "target_text": ("STRING", {"multiline": True,"tooltip":"Which tokens are to be saved. Commas are ignored."}),
+#                 "filename": ("STRING", {"multiline": False, "default":"filename"}),
+#                 "save_ignored_tokens" : ("BOOLEAN", {"default": False}),
+#             }
+#         }
+
+#     FUNCTION = "exec"
+#     CATEGORY = "advanced/CLIP Weights Surgery"
+#     RETURN_TYPES = ()
+#     OUTPUT_NODE = True
+
+#     def exec(self, clip, target_text, filename, save_ignored_tokens=False):
+#         to_save = {}
+#         for c, k in enumerate(["g","l"]):
+#             csm1 = getattr(clip.cond_stage_model, f"clip_{k}", None)
+#             tokenizer = getattr(clip.tokenizer, f"clip_{k}", None)
+#             if csm1 is not None:
+#                 to_save[k] = {}
+#                 if not save_ignored_tokens:
+#                     tids = words_to_tokens_ids(tokenizer, target_text)
+#                 else:
+#                     tids = ignored_token_ids
+#                 weights = csm1.transformer.text_model.embeddings.token_embedding.weight
+#                 for t in tids:
+#                     to_save[k][t] = weights[t].clone().cpu()
+#         if len(to_save) > 0:
+#             file_path = os.path.join(weights_output_path, f"{filename}.pt")
+#             torch.save(to_save,file_path)
+#             print(f"Weights saved at path: {file_path}")
+#         else:
+#             print("The only compatible models are SD1.x/SD2/SDXL. Nothing will be saved.")
+#         return {}
+
 class saveCustomTokenNode:
     def __init__(self):
         pass
@@ -359,6 +406,7 @@ class saveCustomTokenNode:
                 "clip": ("CLIP",),
                 "target_text": ("STRING", {"multiline": True,"tooltip":"Which tokens are to be saved. Commas are ignored."}),
                 "filename": ("STRING", {"multiline": False, "default":"filename"}),
+                "token_ids_to_include" : ("STRING", {"multiline": False,"default":"", "tooltip":"integers, comma separated."})
             }
         }
 
@@ -367,7 +415,7 @@ class saveCustomTokenNode:
     RETURN_TYPES = ()
     OUTPUT_NODE = True
 
-    def exec(self, clip, target_text, filename):
+    def exec(self, clip, target_text, filename, token_ids_to_include=""):
         to_save = {}
         for c, k in enumerate(["g","l"]):
             csm1 = getattr(clip.cond_stage_model, f"clip_{k}", None)
@@ -375,6 +423,8 @@ class saveCustomTokenNode:
             if csm1 is not None:
                 to_save[k] = {}
                 tids = words_to_tokens_ids(tokenizer, target_text)
+                titi = [int(s) for s in token_ids_to_include.split(",") if s != ""]
+                tids = tids + titi
                 weights = csm1.transformer.text_model.embeddings.token_embedding.weight
                 for t in tids:
                     to_save[k][t] = weights[t].clone().cpu()
@@ -404,7 +454,7 @@ class loadCustomTokenNode:
         if not wavg:
             required["output_original"] = ("BOOLEAN", {"default": False})
         else:
-            required["loaded_weights_strength"] = ("FLOAT", {"default": 1, "min": -10.0, "max": 100.0, "step": 0.5})
+            required["loaded_weights_strength"] = ("FLOAT", {"default": 1, "min": -10.0, "max": 100.0, "step": 0.1})
         return {"required": required}
 
     IS_WEIGHTED_AVERAGE = False
@@ -413,6 +463,7 @@ class loadCustomTokenNode:
     RETURN_TYPES = ("CLIP",)
 
     def exec(self, clip, filename, output_original=True, loaded_weights_strength=0):
+        clip = clip.clone()
         file_path = os.path.join(weights_output_path, f"{filename}.pt")
         custom_weights = torch.load(file_path)
         for k in custom_weights:
@@ -431,10 +482,68 @@ class loadCustomTokenNode:
                     if loaded_weights_strength != 0:
                         old_weight = self.original_weights[k][t].clone().to(device=device)
                         new_weight = custom_weights[k][t].clone().to(device=device)
-                        clip_weights[t] = new_weight * loaded_weights_strength + old_weight * max(0, 1 - loaded_weights_strength)
+                        # new_weight = old_weight.norm() * new_weight / new_weight.norm()
+                        clip_weights[t] = new_weight * loaded_weights_strength + old_weight * (1 - loaded_weights_strength)
+                        # max(0, 1 - loaded_weights_strength)
                     if not output_original:
                         clip_weights[t] = custom_weights[k][t].clone().to(device=device)
-        csm1.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(clip_weights)
+                csm1.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(clip_weights)
+        return clip,
+
+class multiplyTokenNode:
+    def __init__(self):
+        self.clips_storage = {}
+        msg = "USE A NEW NODE OR RESTART THE UI TO EDIT ANOTHER CLIP MODEL\n\
+To reset the current model to its normal state turn the toggle off and run a batch before unplugging!\n\
+Do not use with another similar node."
+        print(f" \033[91m\n{msg}\033[0m")
+
+    @classmethod
+    def INPUT_TYPES(s):
+        required  = {"clip": ("CLIP",),}
+        required["target_text"] = ("STRING", {"multiline": True})
+        required["multiplier"]  = ("FLOAT", {"default": 1, "min": 0.0, "max": 100.0, "step": 0.5})
+        required["every_tokens"] = ("BOOLEAN", {"default": False})
+        required["special_tokens_ids"] = ("STRING", {"multiline": False,"default":"49406, 49407, 0"})
+        required["include_special"] = (["exclude","include","do_them_only"],)
+        return {"required": required}
+
+    FUNCTION = "exec"
+    CATEGORY = "advanced/CLIP Weights Surgery"
+    RETURN_TYPES = ("CLIP",)
+
+    def exec(self, clip, target_text, multiplier, every_tokens, special_tokens_ids, include_special):
+        clip = clip.clone()
+        ignored_token_ids = [int(s) for s in special_tokens_ids.split(",") if s != ""]
+        for c, k in enumerate(["g","l"]):
+            cond_stage_model = getattr(clip.cond_stage_model, f"clip_{k}", None)
+            if cond_stage_model is not None:
+                clip_tokenizer = getattr(clip.tokenizer, f"clip_{k}", None)
+                target_ids = words_to_tokens_ids(clip_tokenizer,target_text)
+                weights = cond_stage_model.transformer.text_model.embeddings.token_embedding.weight
+                device = weights.device
+                cdtype = weights.dtype
+                if k not in self.clips_storage:
+                    self.clips_storage[k] = torch.clone(weights).to(device="cpu")
+                    all_weights = torch.clone(weights).to(device=model_management.get_torch_device())
+                else:
+                    all_weights = torch.clone(self.clips_storage[k]).to(device=model_management.get_torch_device())
+                special_tokens = []
+                for s in ignored_token_ids:
+                    special_tokens.append(all_weights[s].clone())
+                if multiplier != 1:
+                    if every_tokens and include_special != "do_them_only":
+                        all_weights *= multiplier
+                        if not include_special == "exclude":
+                            for sid, s in enumerate(ignored_token_ids):
+                                all_weights[s] = special_tokens[sid]
+                    elif include_special == "do_them_only":
+                        for t in ignored_token_ids:
+                            all_weights[t] *= multiplier
+                    else:
+                        for t in target_ids:
+                            all_weights[t] *= multiplier
+                cond_stage_model.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(all_weights.to(device=device,dtype=cdtype))
         return clip,
 
 NODE_CLASS_MAPPINGS = {
@@ -442,6 +551,7 @@ NODE_CLASS_MAPPINGS = {
     "CLIP token injection (alt version)": ClipTokenLobotomyAlternativeVersionNode,
     "CLIP take weights from another": replaceCLIPWeights,
     "CLIP level weights": levelCLIPWeights,
+    "CLIP multiply weights": multiplyTokenNode,
     "CLIP fix nans (can be chained, best at end)": fixCLIPWeights,
     "CLIP save custom tokens": saveCustomTokenNode,
     "CLIP load custom tokens": type("loadCustomTokenNode", (loadCustomTokenNode,), { "IS_WEIGHTED_AVERAGE": False}),
