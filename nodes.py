@@ -404,7 +404,7 @@ class loadCustomTokenNode:
         if not wavg:
             required["output_original"] = ("BOOLEAN", {"default": False})
         else:
-            required["loaded_weights_strength"] = ("FLOAT", {"default": 1, "min": -10.0, "max": 10.0, "step": 0.1})
+            required["loaded_weights_strength"] = ("FLOAT", {"default": 1, "min": -10.0, "max": 100.0, "step": 0.5})
         return {"required": required}
 
     IS_WEIGHTED_AVERAGE = False
@@ -431,7 +431,7 @@ class loadCustomTokenNode:
                     if loaded_weights_strength != 0:
                         old_weight = self.original_weights[k][t].clone().to(device=device)
                         new_weight = custom_weights[k][t].clone().to(device=device)
-                        clip_weights[t] = new_weight * loaded_weights_strength + old_weight * (1 - loaded_weights_strength)
+                        clip_weights[t] = new_weight * loaded_weights_strength + old_weight * max(0, 1 - loaded_weights_strength)
                     if not output_original:
                         clip_weights[t] = custom_weights[k][t].clone().to(device=device)
         csm1.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(clip_weights)
