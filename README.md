@@ -6,6 +6,8 @@ CLIP Load ==> my node in here named like "load custom weight (perp)" using the f
 
 The secret single negative token is written in the text file in the weights folder.
 
+The category in is "advanced" and something like "CLIP surgery"
+
 # CLIP-Token-Injection
 Manually edit CLIP token weights, results can be saved to remain permanent.
 
