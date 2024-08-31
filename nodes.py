@@ -399,7 +399,7 @@ class loadCustomTokenNode:
         return {"required": {
                 "clip": ("CLIP",),
                 "filename": (filenames,),
-                # "output_original": ("BOOLEAN", {"default": False}),
+                "output_original": ("BOOLEAN", {"default": False}),
             }
         }
     FUNCTION = "exec"
@@ -415,9 +415,16 @@ class loadCustomTokenNode:
                 clip_weights = csm1.transformer.text_model.embeddings.token_embedding.weight.clone()
                 device = clip_weights.device
                 for t in custom_weights[k]:
-                    clip_weights[t] = custom_weights[k][t].clone().to(device=device)
+                    if k not in self.original_weights:
+                        self.original_weights[k] = {}
+                    if t in self.original_weights[k]:
+                        if output_original:
+                            clip_weights[t] = self.original_weights[k][t].clone().to(device=device)
+                    else:
+                        self.original_weights[k][t] = clip_weights[t].clone().to(device='cpu')
+                    if not output_original:
+                        clip_weights[t] = custom_weights[k][t].clone().to(device=device)
         csm1.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(clip_weights)
-        print("Custom tokens applied. The effect will remain until reload of the model.")
         return clip,
 
 NODE_CLASS_MAPPINGS = {
