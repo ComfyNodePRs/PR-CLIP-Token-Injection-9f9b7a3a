@@ -1,3 +1,10 @@
+Update:
+
+To port all the "score" tags in a CLIP as a single token meant to be used as a negative set:
+CLIP Load > load custom weight "perp" using the file named "all_scores_as_one_negative.pt" and a strength of 0.5, nothing more nothing less > save clip > restart the  UI because memory shenanigans (I did it kinda hacky) > enjoy
+
+The secret single negative token is written in the text file in the weights folder.
+
 # CLIP-Token-Injection
 Manually edit CLIP token weights, results can be saved to remain permanent.
 
