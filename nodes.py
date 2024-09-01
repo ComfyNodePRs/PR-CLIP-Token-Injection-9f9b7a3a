@@ -268,18 +268,19 @@ Do not use with another similar node."
                 else:
                     all_weights = torch.clone(self.clips_storage[k]).to(device=model_management.get_torch_device())
 
-                if turn_into_sign_instead:
-                    #  print(f"max abs value is {all_weights[0].abs().max().item()}")
-                        all_weights = all_weights.sign() * all_weights[0].abs().max()
-                elif level_clip:
+                if level_clip:
                     for g in ignored_token_ids:
                         ignored_token_weights.append(all_weights[g].clone())
                     norm_w = torch.linalg.norm(all_weights,dim=1).unsqueeze(1)
                     backup_nan  = all_weights.clone()
-                    if multiply_by_mean:
-                        all_weights = all_weights * (norm_w.mean() + 1e-16) / (norm_w + 1e-16)
+                    if turn_into_sign_instead:
+                        # print(f"max abs value is {all_weights[0].abs().max().item()}")
+                        all_weights = all_weights.sign() * all_weights[0].abs().max() # I tried without replacing NaNs after and it still works
                     else:
-                        all_weights = all_weights / (norm_w + 1e-16)
+                        if multiply_by_mean:
+                            all_weights = all_weights * (norm_w.mean() + 1e-16) / (norm_w + 1e-16)
+                        else:
+                            all_weights = all_weights / (norm_w + 1e-16)
                     nan_values  = torch.isnan(all_weights)
                     all_weights[nan_values] = backup_nan[nan_values]
                     for j, g in enumerate(ignored_token_ids):
