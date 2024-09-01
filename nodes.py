@@ -296,9 +296,8 @@ Do not use with another similar node."
     def INPUT_TYPES(s):
         return {"required": {
                 "clip": ("CLIP",),
-                "turn_into_sign" : ("BOOLEAN", {"default": True, "tooltip":"The weights all becomes 1, 0 or -1"}),
-                "add_1e_3" : ("BOOLEAN", {"default": True, "tooltip":"Add 1e-3 to the weights and they will become 1 or -1 instead"}),
-                # "multiply_by_max_first_token" : ("BOOLEAN", {"default": True, "tooltip":"Multiply by the maximum absolute value found in the first token."}),
+                "turn_into_sign" : ("BOOLEAN", {"default": True, "tooltip":"The weights all becomes 1, 0 or -1\nThe end result is multiplied by the maximum absolute value found in the first token."}),
+                "add_1e_3" : ("BOOLEAN", {"default": True, "tooltip":"Add 1e-3 to the weights and they will become 1 or -1 instead\nThe end result is multiplied by the maximum absolute value found in the first token."}),
             }
         }
 
