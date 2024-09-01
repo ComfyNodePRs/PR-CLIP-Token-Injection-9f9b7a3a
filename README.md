@@ -65,7 +65,7 @@ The model to pick from can be changed. Not the one being modified. So you can te
 
 ![image](https://github.com/user-attachments/assets/df86ed00-28fe-4d8b-8629-b9e4c38e2d4d)
 
-Divide each token by it's own torch.norm(). After a bit of testing this really seems to help my most tortured models to stop merging people with furnitures but my confidence is relative. I've only been testing all of this since a few hours. Test and see.
+Divide each token by it's own torch.norm() and multiply by the mean. After a bit of testing this really seems to help my most tortured models to stop merging people with furnitures but my confidence is relative. I've only been testing all of this since a few hours. Test and see.
 
 The toggles allows to compare.
 
