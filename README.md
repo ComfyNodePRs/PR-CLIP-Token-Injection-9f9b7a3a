@@ -19,6 +19,10 @@ Don't chain these nodes. Save the result after testing, restart and reload. Don'
 
 (they keep the weights they receive first)
 
+## Note
+
+Current state is hacky as hell. Don't change model, limit to one node and everything will be alright.
+
 
 ## CLIP token injection:
 
