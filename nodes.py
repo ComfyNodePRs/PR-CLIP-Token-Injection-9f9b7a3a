@@ -243,6 +243,8 @@ Do not use with another similar node."
         return {"required": {
                 "clip": ("CLIP",),
                 "level_clip" : ("BOOLEAN", {"default": True}),
+                "multiply_by_mean" : ("BOOLEAN", {"default": True}),
+                "turn_into_sign_instead" : ("BOOLEAN", {"default": False, "tooltip":"The weights all becomes 1, 0 or -1 multiplied by the maximum absolute value found in the first token."}),
             }
         }
 
@@ -250,7 +252,7 @@ Do not use with another similar node."
     CATEGORY = "advanced/CLIP Weights Surgery"
     RETURN_TYPES = ("CLIP",)
 
-    def exec(self, clip, level_clip):
+    def exec(self, clip, level_clip, multiply_by_mean, turn_into_sign_instead):
         clip = clip.clone()
         for c, k in enumerate(["g","l"]):
             ignored_token_weights = []
@@ -270,10 +272,16 @@ Do not use with another similar node."
                     for g in ignored_token_ids:
                         ignored_token_weights.append(all_weights[g].clone())
                     norm_w = torch.linalg.norm(all_weights,dim=1).unsqueeze(1)
-                    backup_nan  = all_weights.clone()
-                    all_weights = all_weights * (norm_w.mean() + 1e-16) / (norm_w + 1e-16)
-                    nan_values  = torch.isnan(all_weights)
-                    all_weights[nan_values] = backup_nan[nan_values]
+                    # backup_nan  = all_weights.clone()
+                    if turn_into_sign_instead:
+                        #  print(f"max abs value is {all_weights[0].abs().max().item()}")
+                         all_weights = all_weights.sign() * all_weights[0].abs().max()
+                    elif multiply_by_mean:
+                        all_weights = all_weights * (norm_w.mean() + 1e-16) / (norm_w + 1e-16)
+                    else:
+                        all_weights = all_weights / (norm_w + 1e-16)
+                    # nan_values  = torch.isnan(all_weights)
+                    # all_weights[nan_values] = backup_nan[nan_values]
                     for j, g in enumerate(ignored_token_ids):
                         all_weights[g] = ignored_token_weights[j]
 
