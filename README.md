@@ -1,3 +1,5 @@
+These nodes are to edit the text weights, so to customize how the prompts will be interpreted.
+
 Update:
 
 To port all the "score" tags in a CLIP as a single token meant to be used as a negative set the nodes:
