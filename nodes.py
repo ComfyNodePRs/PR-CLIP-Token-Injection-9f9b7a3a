@@ -244,7 +244,6 @@ Do not use with another similar node."
                 "clip": ("CLIP",),
                 "level_clip" : ("BOOLEAN", {"default": True}),
                 "multiply_by_mean" : ("BOOLEAN", {"default": True}),
-                "turn_into_sign_instead" : ("BOOLEAN", {"default": False, "tooltip":"The weights all becomes 1, 0 or -1 multiplied by the maximum absolute value found in the first token."}),
             }
         }
 
@@ -252,7 +251,7 @@ Do not use with another similar node."
     CATEGORY = "advanced/CLIP Weights Surgery"
     RETURN_TYPES = ("CLIP",)
 
-    def exec(self, clip, level_clip, multiply_by_mean, turn_into_sign_instead):
+    def exec(self, clip, level_clip, multiply_by_mean):
         clip = clip.clone()
         for c, k in enumerate(["g","l"]):
             ignored_token_weights = []
@@ -273,16 +272,71 @@ Do not use with another similar node."
                         ignored_token_weights.append(all_weights[g].clone())
                     norm_w = torch.linalg.norm(all_weights,dim=1).unsqueeze(1)
                     backup_nan  = all_weights.clone()
-                    if turn_into_sign_instead:
-                        # print(f"max abs value is {all_weights[0].abs().max().item()}")
-                        all_weights = all_weights.sign() * all_weights[0].abs().max() # I tried without replacing NaNs after and it still works
+                    if multiply_by_mean:
+                        all_weights = all_weights * (norm_w.mean() + 1e-16) / (norm_w + 1e-16)
                     else:
-                        if multiply_by_mean:
-                            all_weights = all_weights * (norm_w.mean() + 1e-16) / (norm_w + 1e-16)
-                        else:
-                            all_weights = all_weights / (norm_w + 1e-16)
+                        all_weights = all_weights / (norm_w + 1e-16)
                     nan_values  = torch.isnan(all_weights)
                     all_weights[nan_values] = backup_nan[nan_values]
+                    for j, g in enumerate(ignored_token_ids):
+                        all_weights[g] = ignored_token_weights[j]
+
+                cond_stage_model.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(all_weights.to(device=device,dtype=cdtype))
+        return clip,
+
+class turnCLIPWeightsIntoSign:
+    def __init__(self):
+        self.clips_storage = {}
+        msg = "USE A NEW NODE OR RESTART THE UI TO EDIT ANOTHER CLIP MODEL\n\
+To reset the current model to its normal state turn the toggle off and run a batch before unplugging!\n\
+Do not use with another similar node."
+        print(f" \033[91m\n{msg}\033[0m")
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {
+                "clip": ("CLIP",),
+                "turn_into_sign" : ("BOOLEAN", {"default": True, "tooltip":"The weights all becomes 1, 0 or -1"}),
+                "multiply_by_max_first_token" : ("BOOLEAN", {"default": True, "tooltip":"Multiply by the maximum absolute value found in the first token."}),
+            }
+        }
+
+    FUNCTION = "exec"
+    CATEGORY = "advanced/CLIP Weights Surgery"
+    RETURN_TYPES = ("CLIP",)
+
+    def exec(self, clip, turn_into_sign, multiply_by_max_first_token):
+        clip = clip.clone()
+        for c, k in enumerate(["g","l"]):
+            ignored_token_weights = []
+            cond_stage_model = getattr(clip.cond_stage_model, f"clip_{k}", None)
+            if cond_stage_model is not None:
+                weights = cond_stage_model.transformer.text_model.embeddings.token_embedding.weight
+                device = weights.device
+                cdtype = weights.dtype
+
+                if k not in self.clips_storage:
+                    self.clips_storage[k] = torch.clone(weights).to(device="cpu")
+                    all_weights = torch.clone(weights).to(device=model_management.get_torch_device())
+                else:
+                    all_weights = torch.clone(self.clips_storage[k]).to(device=model_management.get_torch_device())
+
+                if turn_into_sign:
+                    for g in ignored_token_ids:
+                        ignored_token_weights.append(all_weights[g].clone())
+
+                    # backup_nan  = all_weights.clone()
+
+                    max_fist_token = all_weights[0].abs().max().item()
+                    # print(f"max abs value is {max_fist_token}")
+
+                    all_weights = all_weights.sign()
+
+                    if multiply_by_max_first_token:
+                        all_weights = all_weights * max_fist_token
+
+                    # nan_values  = torch.isnan(all_weights)
+                    # all_weights[nan_values] = backup_nan[nan_values]
                     for j, g in enumerate(ignored_token_ids):
                         all_weights[g] = ignored_token_weights[j]
 
@@ -567,6 +621,7 @@ NODE_CLASS_MAPPINGS = {
     "CLIP token injection (alt version)": ClipTokenLobotomyAlternativeVersionNode,
     "CLIP take weights from another": replaceCLIPWeights,
     "CLIP level weights": levelCLIPWeights,
+    "CLIP turn weights into sign": turnCLIPWeightsIntoSign,
     "CLIP multiply weights": multiplyTokenNode,
     "CLIP fix nans (can be chained, best at end)": fixCLIPWeights,
     "CLIP save custom tokens": saveCustomTokenNode,
