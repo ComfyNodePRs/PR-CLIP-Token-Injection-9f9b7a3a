@@ -1,14 +1,5 @@
 These nodes are to edit the text weights, so to customize how the prompts will be interpreted.
 
-Update:
-
-To port all the "score" tags in a CLIP as a single token meant to be used as a negative set the nodes:
-
-~~CLIP Load ==> my node in here named like ~~"load custom weight (perp)" using the file named "all_scores_as_one_negative.pt" and a strength of 0.5, nothing more nothing less~~ Just use the load token, the simple thing. ==> save clip ==> restart the  UI because memory shenanigans (I did it kinda hacky) ==> enjoy~~
- Just load the workflow
-
-The secret single negative token is written in the text file in the weights folder.
-
 The category in is "advanced" and something like "CLIP surgery"
 
 # CLIP-Token-Injection
