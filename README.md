@@ -1,3 +1,7 @@
+## Note:
+
+This is hacky as hell, come back later I'm making an actually clean version.
+
 These nodes are to edit the text weights, so to customize how the prompts will be interpreted.
 
 The category in is "advanced" and something like "CLIP surgery"
