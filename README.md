@@ -15,7 +15,7 @@ You will find them in the category "advanced/token surgery".
 
 Each token composing any word in the first text input will be modified by those in the second and third text inputs.
 
-"pos_vs_neg" affects the relative influence in between the second and third text inputs. At 1 will only add the meaning of the second text input. At 0 will only subtract what is the third text input.
+"pos_vs_neg" affects the relative influence in between the second and third text inputs. At 1 will only add the meaning of the second text input. At 0 will only subtract what is the third text input. This value has no use if only one of the two text inputs is used.
 
 "strength": This is a weighted average. At 1 will fully replace the target tokens. At 0 will have no effect.
 
