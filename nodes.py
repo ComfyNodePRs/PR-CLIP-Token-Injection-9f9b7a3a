@@ -37,6 +37,10 @@ def get_weights_and_tokenizer(c, k):
     tokenizer = getattr(c.tokenizer, f"clip_{k}", None)
     return weights_patch, original_weights, tokenizer
 
+tooltips = {
+    "pos_vs_neg":"Determins the influence of the positive vs the negative vectors in the final result.\nAt 0 will only subtract what is in the negative.\nAt 1 will only add what is in the positive.\nIf any of the text inputs is empty this slider becomes useless.\nGenerally better above 0.5",
+    "strength":"-1 will reverse positive vs negative\n 0 is disabled\n 1 fully replaces the targeted tokens by the result"
+}
 class ClipTokenLobotomyNode:
     def __init__(self):
         pass
@@ -48,8 +52,8 @@ class ClipTokenLobotomyNode:
                 "target_text":  ("STRING", {"multiline": True}),
                 "text_add":     ("STRING", {"multiline": True}),
                 "text_sub":     ("STRING", {"multiline": True}),
-                "pos_vs_neg":   ("FLOAT",  {"default": 0.5, "min":  0.0, "max": 1.0, "step": 1/10}),
-                "strength":     ("FLOAT",  {"default": 1.0, "min": -1.0, "max": 1.0, "step": 1/20}),
+                "pos_vs_neg":   ("FLOAT",  {"default": 0.5, "min":  0.0, "max": 1.0, "step": 1/10, "tooltip":tooltips["pos_vs_neg"]}),
+                "strength":     ("FLOAT",  {"default": 1.0, "min": -1.0, "max": 1.0, "step": 1/20, "tooltip":tooltips["strength"]}),
             }
         }
 
@@ -160,7 +164,6 @@ class loadCustomTokenNode:
         required["strength"] = ("FLOAT", {"default": 1, "min": .0, "max": 1.0, "step": 1/10})
         return {"required": required}
 
-    IS_WEIGHTED_AVERAGE = False
     FUNCTION = "exec"
     CATEGORY = "advanced/token surgery"
     RETURN_TYPES = ("CLIP",)
