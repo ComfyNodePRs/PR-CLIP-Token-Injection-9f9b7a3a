@@ -37,7 +37,7 @@ Allows to edit how the text will be interpreted. In cases where you would be pre
 
 Temporarily or permanently.
 
-You could for example combine into realistic "dark noise shadow cinematic photographic" and subtract from it "cgi render rendering rendered videogame videogames cartoon" to help with general realism.
+You could for example combine into "realistic" the tokens "dark noise shadow cinematic photographic" and subtract from it "cgi render rendering rendered videogame videogames cartoon" to help with general realism.
 
 ### AI Safety:
 
