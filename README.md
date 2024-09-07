@@ -6,9 +6,6 @@ You could see it as either customisation, "one token prompt" up to some limitati
 
 The shared example weights does not contain any image-knowledge but the text vector of the words affected.
 
-> [!CAUTION]
-> I do not provide any guarantee of result regarding AI safety. This is all experimental.
-
 You will find them in the category "advanced/token surgery".
 
 # CLIP-Token-Injection
