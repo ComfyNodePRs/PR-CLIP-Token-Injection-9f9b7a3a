@@ -57,7 +57,7 @@ Here "woman" is being added "pretty perfect love" and subtracted "evil demon ugl
 
 ![image](https://github.com/user-attachments/assets/45ea18e4-9290-4dea-af7e-6c8f53e2158e)
 
-Same modification strength for both words, In this order: -1 / -0.5 / 0 (base image) / 0.5 / 1 / 1 but fully adding the words to add, without subtracting the negative words (so "pos_vs_neg" at 1):
+Same modification strength for both words, In this order: -1 / -0.7 / 0 (base image) / 0.7 / 1 / 1 but fully adding the words to add, without subtracting the negative words (so "pos_vs_neg" at 1):
 
 ![image_grid](https://github.com/user-attachments/assets/ae81eed4-cc99-492c-a66c-e17fa45b9763)
 
