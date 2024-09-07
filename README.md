@@ -61,7 +61,7 @@ The child related targeted tokens from the file named "AISafety.pt" are the foll
 Some have been replaced by "Chris" and some by "Hansen". Tokens used by NSFW related terms have mainly been replaced by the token "fbi".
 
 > [!TIP]
-> - Remember, if you are attempting to use many tokens to add and subtract that it will throw it all into single tokens. Typing the trylogy of the lord of the ring will most likely give you a token without much meaning.
+> - Remember, if you are attempting to use many tokens to add and subtract that it will throw it all into single tokens. Typing the trylogy of the lord of the rings will most likely give you a token without much meaning.
 > - in the add or subtract text inputs, a word used twice will be counting double
 > - to not fully lose the meaning of a word you can either set a lower strength or copy the target token in the text input of tokens to add.
 > - Using words that are a single token seems to work better. CLIP L and CLIP G shares the same vocabulary which you can check in any Huggingface repository containing a CLIP L or G model, often under the name of "vocab.json". [Here is one](https://huggingface.co/openai/clip-vit-large-patch14/raw/main/vocab.json)
