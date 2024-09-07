@@ -69,7 +69,7 @@ class ClipTokenLobotomyNode:
             return clip,
 
         c = clip.clone()
-        strength = sign(strength) * abs(strength) ** (1 / 2)
+        # strength = sign(strength) * abs(strength) ** (1 / 2)
         pvsn = clamp(pos_vs_neg + ne(text_add) - ne(text_sub), 0, 1)
         s_mul = (2 - abs(0.5 - pvsn) / 0.5)
 
