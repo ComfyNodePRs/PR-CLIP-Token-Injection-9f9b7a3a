@@ -2,7 +2,7 @@
 
 These nodes are to edit the text weights, so to customize how the prompts will be interpreted.
 
-The shared example weights does not contain any "knowledge" but the vector representations of the words/text affected.
+The shared example weights does not contain any image-knowledge but the text vector of the words affected.
 
 > [!CAUTION]
 > I do not provide any guarantee of result regarding AI safety. This is all experimental.
