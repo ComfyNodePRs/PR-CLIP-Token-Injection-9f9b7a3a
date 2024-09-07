@@ -40,7 +40,8 @@ You could for example combine into realistic "dark noise shadow cinematic photog
 
 ### AI Safety:
 
-**I DO NOT PROVIDE ANY GUARANTEE OF RESULT** nor that any user won't be able to circumvent any modification you may apply.
+> [!CAUTION]
+> **I DO NOT PROVIDE ANY GUARANTEE OF RESULT** nor that any user won't be able to circumvent any modification you may apply.
 
 Provided in the "custom weights" folder a large set of tokens where main concepts relative to nudity/pornography and children have been modified.
 
