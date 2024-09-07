@@ -28,9 +28,9 @@ Allows to save directly the customized weights by simply typing them.
 
 The node loading them uses a weighted average. 1 meaning full replacement of the target tokens.
 
-# Potential use case
+## Potential use case
 
-## Weights customization:
+### Weights customization:
 
 Allows to edit how the text will be interpreted. In cases where you would be prefering something differently.
 
@@ -38,7 +38,7 @@ Temporarily or permanently.
 
 You could for example combine into realistic "dark noise shadow cinematic photographic" and subtract from it "cgi render rendering rendered videogame videogames cartoon" to help with general realism.
 
-## AI Safety:
+### AI Safety:
 
 **I DO NOT PROVIDE ANY GUARANTEE OF RESULT** nor that any user won't be able to circumvent any modification you may apply.
 
