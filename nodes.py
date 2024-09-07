@@ -54,7 +54,7 @@ class ClipTokenLobotomyNode:
                 "text_add":     ("STRING", {"multiline": True}),
                 "text_sub":     ("STRING", {"multiline": True}),
                 "pos_vs_neg":   ("FLOAT",  {"default": 0.5, "min":  0.0, "max": 1.0, "step": 1/10, "tooltip":tooltips["pos_vs_neg"]}),
-                "strength":     ("FLOAT",  {"default": 1.0, "min": -1.0, "max": 1.0, "step": 1/10, "tooltip":tooltips["strength"]}),
+                "strength":     ("FLOAT",  {"default": 1.0, "min": -1.0, "max": 1.0, "step": 1/20, "tooltip":tooltips["strength"]}),
             }
         }
 
