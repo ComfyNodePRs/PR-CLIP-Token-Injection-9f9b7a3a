@@ -48,8 +48,8 @@ class ClipTokenLobotomyNode:
                 "target_text":  ("STRING", {"multiline": True}),
                 "text_add":     ("STRING", {"multiline": True}),
                 "text_sub":     ("STRING", {"multiline": True}),
-                "pos_vs_neg":   ("FLOAT",  {"default": 0.5, "min": 0.0, "max": 1.0, "step": 1/10}),
-                "strength":     ("FLOAT",  {"default": 1.0, "min": 0.0, "max": 1.0, "step": 1/20}),
+                "pos_vs_neg":   ("FLOAT",  {"default": 0.5, "min":  0.0, "max": 1.0, "step": 1/10}),
+                "strength":     ("FLOAT",  {"default": 1.0, "min": -1.0, "max": 1.0, "step": 1/20}),
             }
         }
 
@@ -97,11 +97,9 @@ class ClipTokenLobotomyNode:
                 w_add = get_tokens_for_change(text_add,tokenizer, original_weights, j)
                 w_sub = get_tokens_for_change(text_sub,tokenizer, original_weights, j)
 
-                if strength < 0:
-                    w_add, w_sub = w_sub, w_add
                 for t in target_ids:
                     w_pat = weights_patch[t]
-                    weights_patch[t] = (w_add * pvsn - w_sub * (1 - pvsn)) * abs(strength * s_mul) + w_pat * (1 - abs(strength))
+                    weights_patch[t] = (w_add * pvsn - w_sub * (1 - pvsn)) * (strength * s_mul) + w_pat * (1 - abs(strength))
 
                 c.patcher.add_object_patch(f"clip_{k}.transformer.text_model.embeddings.token_embedding.weight", torch.nn.Parameter(weights_patch.to(default_device)))
         return c,
