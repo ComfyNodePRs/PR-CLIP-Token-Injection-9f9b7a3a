@@ -48,7 +48,7 @@ Provided in the "custom weights" folder a file named "AISafety.pt" in which a la
 
 Any user prompting for unsafe content will find Chris Hansen staring at him, with some FBI-related details.
 
-The file named "naked_little_girl_example.png" shows you how to load these weights.
+The file named "naked_little_girl_example.png" shows you how to load these weights and demonstrates what you will get if you try to use such prompt.
 
 I can not share the full list of words used as even pastebin thinks that I'm trying to share CP.
 
