@@ -2,6 +2,8 @@
 
 This is hacky as hell, come back later I'm making an actually clean version.
 
+Update: The node "CLIP token injection" is clean, working, can be chained and nice. Stick to this for now :p
+
 ---
 
 These nodes are to edit the text weights, so to customize how the prompts will be interpreted.
