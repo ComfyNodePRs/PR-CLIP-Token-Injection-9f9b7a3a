@@ -1,13 +1,18 @@
 import torch
+import torch.nn.functional as F
 import comfy.model_management as model_management
 import os
-mean = lambda *x: sum(x)/len(x)
+import re
+from math import copysign, pi, sin
+sign  = lambda x: copysign(1, x)
+clamp = lambda x,vmin,vmax: max(min(x,vmax),vmin)
+fnorm = lambda x, y = True: x / torch.norm(x) if y else x
+ne    = lambda x: x != ""
 ignored_token_ids = [49406, 49407, 0]
 default_device = model_management.get_torch_device()
 current_dir = os.path.dirname(os.path.realpath(__file__))
 weights_output_path = os.path.join(current_dir, "custom_weights")
-# del base_clip,base_model
-# comfy.model_management.cleanup_models()
+CLIP_LETTERS = ["g","l"]
 
 def words_to_tokens_ids(clip_model, text_input, allow_double=False):
     if text_input == "":
@@ -20,28 +25,31 @@ def words_to_tokens_ids(clip_model, text_input, allow_double=False):
         return text_token_ids
     return list(dict.fromkeys(text_token_ids))
 
+def split_or(string):
+    delimiters = [" ", ",", "\n"]
+    pattern = '|'.join(map(re.escape, delimiters))
+    return [part.replace("_"," ") for part in re.split(f'(?:{pattern})+', string) if part]
+
+def get_weights_and_tokenizer(c, k):
+    key_patches = c.get_key_patches()
+    original_weights = key_patches.get(f"clip_{k}.transformer.text_model.embeddings.token_embedding.weight", [None])[-1]
+    weights_patch = c.patcher.object_patches.get(f"clip_{k}.transformer.text_model.embeddings.token_embedding.weight", original_weights)
+    tokenizer = getattr(c.tokenizer, f"clip_{k}", None)
+    return weights_patch, original_weights, tokenizer
+
 class ClipTokenLobotomyNode:
     def __init__(self):
-        self.clips_storage = {}
-        msg = "WORK IN PROGRESS :p\nTHE NODE IS TIED TO THE MODEL UNTIL RESTART. It keeps the weights in its memory so you can test and edit. Save the result and restart once your done.\n\
-To reset the current model to its normal state set the multiplier to 0 and run a batch before unplugging!\n\
-Do not chain with another similar node."
-        print(f" \033[91m\n{msg}\033[0m")
+        pass
 
     @classmethod
     def INPUT_TYPES(s):
         return {"required": {
                 "clip": ("CLIP",),
-                "target_text": ("STRING", {"multiline": True}),
-                
-                "text_add": ("STRING", {"multiline": True}),
-                "strength_add": ("FLOAT", {"default": 0.5, "min": .0, "max": 1.0, "step": 0.1}),
-                "text_sub": ("STRING", {"multiline": True}),
-                "strength_sub": ("FLOAT", {"default": 0.5, "min": .0, "max": 1.0, "step": 0.1}),
-                "both_strengths_multiplier": ("FLOAT", {"default": 0.5, "min": 0, "max": 100.0, "step": 0.5}),
-                "allow_doubles" : ("BOOLEAN", {"default": False, "tooltip":"Allow tokens mentionned multiple times to accumulate.\nThe target tokens remain unique."}),
-                "auto_weights" : ("BOOLEAN", {"default": False, "tooltip":"Rebalance the average."}),
-                # "apply_to_all_weights" : ("BOOLEAN", {"default": False, "tooltip":"This is a bad idea."}),
+                "target_text":  ("STRING", {"multiline": True}),
+                "text_add":     ("STRING", {"multiline": True}),
+                "text_sub":     ("STRING", {"multiline": True}),
+                "pos_vs_neg":   ("FLOAT",  {"default": 0.5, "min":  0.0, "max": 1.0, "step": 1/10}),
+                "strength": ("FLOAT",  {"default": 1.0, "min": -1.0, "max": 1.0, "step": 1/100}),
             }
         }
 
@@ -50,200 +58,64 @@ Do not chain with another similar node."
     RETURN_TYPES = ("CLIP",)
     RETURN_NAMES = ("CLIP",)
 
-    # def diff_vec(self, a, b):
-    #     b = b.unsqueeze(0).repeat(a.size(0) // b.unsqueeze(0).size(0), 1)
-    #     norm_a = torch.linalg.norm(a, dim=1).unsqueeze(1)
-    #     res = b - a * (a / norm_a * (b / (norm_a + 1e-16))).sum(dim=1).unsqueeze(1)
-    #     return torch.nan_to_num(res, nan=0.0)
+    def exec(self, clip, target_text, text_add, text_sub, pos_vs_neg, strength):
+        bf = ne(text_add) + ne(text_sub)
+        if target_text == "" or bf == 0:
+            return clip,
 
-    def get_weights_from_ids(self,weights,ids):
-        warr = {}
-        for i in ids:
-            warr[i] = weights[i].clone()
-        return warr
+        c = clip.clone()
+        pvsn = clamp(pos_vs_neg + ne(text_add) - ne(text_sub), 0, 1)
+        s_mul = (2 - abs(0.5 - pvsn) / 0.5)
 
-    def exec(self, clip, target_text, text_add, strength_add, text_sub,
-             strength_sub, both_strengths_multiplier, allow_doubles, auto_weights=False):
-        clip = clip.clone()
-        for c, k in enumerate(["g","l"]):
-            weights_pos = {}
-            weights_neg = {}
-            weight_difs = {}
-            ids_pos = []
-            ids_neg = []
-            clip_tokenizer = getattr(clip.tokenizer, f"clip_{k}", None)
-            cond_stage_model = getattr(clip.cond_stage_model, f"clip_{k}", None)
+        def blend_tokens(t):
+            if len(t) == 1:
+                return t[0]
+            if not isinstance(t, torch.Tensor):
+                t = torch.stack(t)
+            return t.sum(dim=0) / t.norm(dim=1, keepdim=True).sum(dim=0)
 
-            if cond_stage_model is not None:
-                weights = cond_stage_model.transformer.text_model.embeddings.token_embedding.weight
-                device = weights.device
-                cdtype = weights.dtype
+        def get_tokens_for_change(text,c,w,j):
+            if text == "": return torch.zeros_like(w[0]).to(default_device)
+            individual_words = split_or(text)
+            change_tokens = []
+            for d in individual_words:
+                tfc  = words_to_tokens_ids(c, d, allow_double=True)
+                toks = [w[t].clone().to(default_device) for t in tfc]
+                toks = blend_tokens(toks)
+                change_tokens.append(toks)
+            if j == 0: print(f"Tokens detected: {len(change_tokens)}")
+            return blend_tokens(change_tokens)
 
-                target_ids = words_to_tokens_ids(clip_tokenizer,target_text)
-                ids_pos = words_to_tokens_ids(clip_tokenizer,text_add,allow_doubles)
-                ids_neg = words_to_tokens_ids(clip_tokenizer,text_sub,allow_doubles)
+        for j, k in enumerate(CLIP_LETTERS):
+            weights_patch, original_weights, tokenizer = get_weights_and_tokenizer(c, k)
 
-                n_pos = len(ids_pos)
-                n_neg = len(ids_neg)
-                do_pos = (len(text_add) * n_pos * strength_add * both_strengths_multiplier) > 0
-                do_neg = (len(text_sub) * n_neg * strength_sub * both_strengths_multiplier) > 0
-                do_any = do_pos or do_neg
+            if None not in [original_weights, tokenizer]:
+                weights_patch = weights_patch.clone().to(default_device)
 
-                if c == 0:
-                    print(f"Positive tokens: {n_pos}")
-                    print(f"Negative tokens: {n_neg}")
+                target_ids = words_to_tokens_ids(tokenizer, target_text)
+                w_add = get_tokens_for_change(text_add,tokenizer, original_weights, j)
+                w_sub = get_tokens_for_change(text_sub,tokenizer, original_weights, j)
 
-                if k not in self.clips_storage:
-                    self.clips_storage[k] = torch.clone(weights).to(device="cpu")
-                    all_weights = torch.clone(weights).to(device=model_management.get_torch_device())
-                else:
-                    all_weights = torch.clone(self.clips_storage[k]).to(device=model_management.get_torch_device())
+                if strength < 0:
+                    w_add, w_sub = w_sub, w_add
+                for t in target_ids:
+                    w_pat = weights_patch[t]
+                    weights_patch[t] = (w_add * pvsn - w_sub * (1 - pvsn)) * abs(strength * s_mul) + w_pat * (1 - abs(strength))
 
-                if do_any:
-                    # target_weigths = self.get_weights_from_ids(all_weights,target_ids)
-                    if do_pos:
-                        weights_pos = self.get_weights_from_ids(all_weights,ids_pos)
-                    if do_neg:
-                        weights_neg = self.get_weights_from_ids(all_weights,ids_neg)
-                    for t in target_ids:
-                        p_res = torch.zeros_like(all_weights[t])
-                        n_res = torch.zeros_like(all_weights[t])
-                        p_div = 0
-                        n_div = 0
-                        for i in list(dict.fromkeys([*ids_pos,*ids_neg])):
-                            if t == i: continue
-                            if i in weights_pos:
-                                p_res += (weights_pos[i] - all_weights[t]) * strength_add
-                                p_div += 1
-                            if i in weights_neg:
-                                n_res += (weights_neg[i] - all_weights[t]) * strength_sub
-                                n_div += 1
-                        p_res = p_res / max(p_div,1)
-                        n_res = n_res / max(n_div,1)
-                        
-                        balance_mult = 1 if not auto_weights else max(1, p_div * strength_add - n_div * strength_sub) / 4
-                        if t in weight_difs:
-                            weight_difs[t] += (p_res - n_res) * both_strengths_multiplier * balance_mult
-                        else:
-                            weight_difs[t]  = (p_res - n_res) * both_strengths_multiplier * balance_mult
-                    for t in target_ids:
-                        all_weights[t] = all_weights[t] + weight_difs[t]
-                cond_stage_model.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(all_weights.to(device=device,dtype=cdtype))
-        return clip,
-
-class ClipTokenLobotomyAlternativeVersionNode:
-    def __init__(self):
-        self.clips_storage = {}
-        msg = "USE A NEW NODE OR RESTART THE UI TO EDIT ANOTHER CLIP MODEL\n\
-To reset the current model to its normal state set the multiplier to 0 and run a batch before unplugging!\n\
-Do not use with another similar node."
-        print(f" \033[91m\n{msg}\033[0m")
-
-    @classmethod
-    def INPUT_TYPES(s):
-        return {"required": {
-                "clip": ("CLIP",),
-                "target_text": ("STRING", {"multiline": True}),
-                
-                "text_add": ("STRING", {"multiline": True}),
-                "strength_add": ("FLOAT", {"default": 0.5, "min": .0, "max": 10.0, "step": 0.5}),
-                "text_subtract": ("STRING", {"multiline": True}),
-                "strength_subtract": ("FLOAT", {"default": 0.5, "min": .0, "max": 10.0, "step": 0.5}),
-                "both_strengths_multiplier": ("FLOAT", {"default": 0.5, "min": 0, "max": 100.0, "step": 0.5}),
-                "apply_to_all_weights" : ("BOOLEAN", {"default": False, "tooltip":"This is a bad idea."}),
-            }
-        }
-
-    FUNCTION = "exec"
-    CATEGORY = "advanced/CLIP Weights Surgery"
-    RETURN_TYPES = ("CLIP",)
-
-    def diff_vec(self, a, b):
-        b = b.unsqueeze(0).repeat(a.size(0) // b.unsqueeze(0).size(0), 1)
-        norm_a = torch.linalg.norm(a,dim=1).unsqueeze(1)
-        res = b - a * (a / norm_a * (b / norm_a)).sum(dim=1).unsqueeze(1)
-        return torch.nan_to_num(res, nan=0.0)
-
-    def words_to_tokens_ids(self, clip_model, text_input):
-        text_input = text_input.replace(" , "," ").replace(" ,"," ").replace(", "," ").replace(","," ").replace("\n"," ")
-        text_tokenized = clip_model.tokenizer.tokenize(text_input)
-        text_token_ids = clip_model.tokenizer.convert_tokens_to_ids(text_tokenized)
-        text_token_ids = [tti for tti in text_token_ids if tti not in ignored_token_ids]
-        return list(dict.fromkeys(text_token_ids))
-
-    def get_weights(self,all_weights,ids):
-        nt = len(ids)
-        res = torch.zeros_like(all_weights,device=all_weights.device)
-        for i in range(nt):
-            res += self.diff_vec(all_weights,all_weights[i].clone()) / nt
-        return res
-
-    def apply_weights(self,all_weights,weights_diff,target_ids,apply_to_all_weights):
-        if apply_to_all_weights:
-            all_weights = all_weights + weights_diff
-        else:
-            for tid in target_ids:
-                # print(tid)
-                all_weights[tid] = all_weights[tid] + weights_diff[tid]
-        return all_weights
-
-    def pos_neg_weights(self,all_weights,ids_tok,n_tok,strength,target_ids,apply_to_all_weights):
-        if n_tok > 0 and strength > 0:
-            weights_to_sub = self.get_weights(all_weights, ids_tok)
-            all_weights = self.apply_weights(all_weights,weights_to_sub * strength,target_ids,apply_to_all_weights)
-        return all_weights
-
-    def exec(self, clip, target_text, text_add, strength_add, text_subtract, strength_subtract, both_strengths_multiplier, apply_to_all_weights):
-        clip = clip.clone()
-
-        for c, k in enumerate(["g","l"]):
-            clip_tokenizer = getattr(clip.tokenizer, f"clip_{k}", None)
-            cond_stage_model = getattr(clip.cond_stage_model, f"clip_{k}", None)
-
-            if cond_stage_model is not None:
-                weights = cond_stage_model.transformer.text_model.embeddings.token_embedding.weight
-                device = weights.device
-                cdtype = weights.dtype
-
-                if k not in self.clips_storage:
-                    self.clips_storage[k] = torch.clone(weights).to(device="cpu")
-                    all_weights = torch.clone(weights).to(device=model_management.get_torch_device())
-                else:
-                    all_weights = torch.clone(self.clips_storage[k]).to(device=model_management.get_torch_device())
-
-                target_ids = self.words_to_tokens_ids(clip_tokenizer,target_text)
-                ids_pos = self.words_to_tokens_ids(clip_tokenizer,text_add)
-                ids_neg = self.words_to_tokens_ids(clip_tokenizer,text_subtract)
-
-                n_pos = len(ids_pos)
-                n_neg = len(ids_neg)
-
-                if c == 0:
-                    print(f"Positive tokens: {n_pos}")
-                    print(f"Negative tokens: {n_neg}")
-
-                if both_strengths_multiplier > 0:
-                    all_weights_pos = self.pos_neg_weights(all_weights.clone(),ids_pos,n_pos,strength_add,target_ids,apply_to_all_weights)
-                    all_weights_neg = self.pos_neg_weights(all_weights.clone(),ids_neg,n_neg,strength_subtract,target_ids,apply_to_all_weights)
-                    all_weights = all_weights + ((all_weights_pos - all_weights) - (all_weights_neg - all_weights)) * both_strengths_multiplier
-
-                cond_stage_model.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(all_weights.to(device=device,dtype=cdtype))
-        return clip,
+                c.patcher.add_object_patch(f"clip_{k}.transformer.text_model.embeddings.token_embedding.weight", torch.nn.Parameter(weights_patch.to(default_device)))
+        return c,
 
 class levelCLIPWeights:
     def __init__(self):
-        self.clips_storage = {}
-        msg = "USE A NEW NODE OR RESTART THE UI TO EDIT ANOTHER CLIP MODEL\n\
-To reset the current model to its normal state turn the toggle off and run a batch before unplugging!\n\
-Do not use with another similar node."
-        print(f" \033[91m\n{msg}\033[0m")
+        pass
 
     @classmethod
     def INPUT_TYPES(s):
         return {"required": {
                 "clip": ("CLIP",),
-                "level_clip" : ("BOOLEAN", {"default": True}),
-                "multiply_by_mean" : ("BOOLEAN", {"default": True}),
+                "level_clip" : (["disabled","enabled","enabled_and_multiply_by_mean_norm"],),
+                "subtract_mean" : (["disabled","globally","per_token"],),
+                "reset_special" : ("BOOLEAN", {"default": True}),
             }
         }
 
@@ -251,53 +123,46 @@ Do not use with another similar node."
     CATEGORY = "advanced/CLIP Weights Surgery"
     RETURN_TYPES = ("CLIP",)
 
-    def exec(self, clip, level_clip, multiply_by_mean):
-        clip = clip.clone()
-        for c, k in enumerate(["g","l"]):
+    def exec(self, clip, level_clip, subtract_mean, reset_special):
+        c = clip.clone()
+        for j, k in enumerate(CLIP_LETTERS):
+            weights_patch, _, _ = get_weights_and_tokenizer(c,k)
             ignored_token_weights = []
-            cond_stage_model = getattr(clip.cond_stage_model, f"clip_{k}", None)
-            if cond_stage_model is not None:
-                weights = cond_stage_model.transformer.text_model.embeddings.token_embedding.weight
-                device = weights.device
-                cdtype = weights.dtype
+            if weights_patch is not None:
+                weights_patch = weights_patch.clone().to(default_device)
+                
+                for g in ignored_token_ids:
+                    ignored_token_weights.append(weights_patch[g].clone())
 
-                if k not in self.clips_storage:
-                    self.clips_storage[k] = torch.clone(weights).to(device="cpu")
-                    all_weights = torch.clone(weights).to(device=model_management.get_torch_device())
-                else:
-                    all_weights = torch.clone(self.clips_storage[k]).to(device=model_management.get_torch_device())
-
-                if level_clip:
-                    for g in ignored_token_ids:
-                        ignored_token_weights.append(all_weights[g].clone())
-                    norm_w = torch.linalg.norm(all_weights,dim=1).unsqueeze(1)
-                    backup_nan  = all_weights.clone()
-                    if multiply_by_mean:
-                        all_weights = all_weights * (norm_w.mean() + 1e-16) / (norm_w + 1e-16)
+                if level_clip != "disabled":
+                    norm_w = weights_patch.norm(dim=1, keepdim=True)
+                    if level_clip == "enabled_and_multiply_by_mean_norm":
+                        weights_patch = weights_patch * (norm_w.mean() + 1e-3) / (norm_w + 1e-3)
                     else:
-                        all_weights = all_weights / (norm_w + 1e-16)
-                    nan_values  = torch.isnan(all_weights)
-                    all_weights[nan_values] = backup_nan[nan_values]
-                    for j, g in enumerate(ignored_token_ids):
-                        all_weights[g] = ignored_token_weights[j]
+                        weights_patch = weights_patch / (norm_w + 1e-3)
 
-                cond_stage_model.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(all_weights.to(device=device,dtype=cdtype))
-        return clip,
+                if subtract_mean == "globally":
+                    weights_patch -= weights_patch.mean()
+                elif subtract_mean == "per_token":
+                    weights_patch -= weights_patch.mean(dim=1, keepdim=True)
+
+                if reset_special:
+                    for j, g in enumerate(ignored_token_ids):
+                        weights_patch[g] = ignored_token_weights[j]
+
+                c.patcher.add_object_patch(f"clip_{k}.transformer.text_model.embeddings.token_embedding.weight", torch.nn.Parameter(weights_patch))
+        return c,
 
 class turnCLIPWeightsIntoSign:
     def __init__(self):
-        self.clips_storage = {}
-        msg = "USE A NEW NODE OR RESTART THE UI TO EDIT ANOTHER CLIP MODEL\n\
-To reset the current model to its normal state turn the toggle off and run a batch before unplugging!\n\
-Do not use with another similar node."
-        print(f" \033[91m\n{msg}\033[0m")
-
+        pass
     @classmethod
     def INPUT_TYPES(s):
         return {"required": {
                 "clip": ("CLIP",),
                 "turn_into_sign" : ("BOOLEAN", {"default": True, "tooltip":"The weights all becomes 1, 0 or -1\nThe end result is multiplied by the maximum absolute value found in the first token."}),
                 "add_1e_3" : ("BOOLEAN", {"default": True, "tooltip":"Add 1e-3 to the weights and they will become 1 or -1 instead\nThe end result is multiplied by the maximum absolute value found in the first token."}),
+                # "multiply_by_max_first_token" : ("BOOLEAN", {"default": True}),
             }
         }
 
@@ -567,69 +432,11 @@ class loadCustomTokenPerpNode:
                 csm1.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(clip_weights)
         return clip,
 
-class multiplyTokenNode:
-    def __init__(self):
-        self.clips_storage = {}
-        msg = "USE A NEW NODE OR RESTART THE UI TO EDIT ANOTHER CLIP MODEL\n\
-To reset the current model to its normal state turn the toggle off and run a batch before unplugging!\n\
-Do not use with another similar node."
-        print(f" \033[91m\n{msg}\033[0m")
-
-    @classmethod
-    def INPUT_TYPES(s):
-        required  = {"clip": ("CLIP",),}
-        required["target_text"] = ("STRING", {"multiline": True})
-        required["multiplier"]  = ("FLOAT", {"default": 1, "min": 0.0, "max": 100.0, "step": 0.5})
-        required["every_tokens"] = ("BOOLEAN", {"default": False})
-        required["special_tokens_ids"] = ("STRING", {"multiline": False,"default":"49406, 49407, 0"})
-        required["include_special"] = (["exclude","include","do_them_only"],)
-        return {"required": required}
-
-    FUNCTION = "exec"
-    CATEGORY = "advanced/CLIP Weights Surgery"
-    RETURN_TYPES = ("CLIP",)
-
-    def exec(self, clip, target_text, multiplier, every_tokens, special_tokens_ids, include_special):
-        clip = clip.clone()
-        ignored_token_ids = [int(s) for s in special_tokens_ids.split(",") if s != ""]
-        for c, k in enumerate(["g","l"]):
-            cond_stage_model = getattr(clip.cond_stage_model, f"clip_{k}", None)
-            if cond_stage_model is not None:
-                clip_tokenizer = getattr(clip.tokenizer, f"clip_{k}", None)
-                target_ids = words_to_tokens_ids(clip_tokenizer,target_text)
-                weights = cond_stage_model.transformer.text_model.embeddings.token_embedding.weight
-                device = weights.device
-                cdtype = weights.dtype
-                if k not in self.clips_storage:
-                    self.clips_storage[k] = torch.clone(weights).to(device="cpu")
-                    all_weights = torch.clone(weights).to(device=model_management.get_torch_device())
-                else:
-                    all_weights = torch.clone(self.clips_storage[k]).to(device=model_management.get_torch_device())
-                special_tokens = []
-                for s in ignored_token_ids:
-                    special_tokens.append(all_weights[s].clone())
-                if multiplier != 1:
-                    if every_tokens and include_special != "do_them_only":
-                        all_weights *= multiplier
-                        if not include_special == "exclude":
-                            for sid, s in enumerate(ignored_token_ids):
-                                all_weights[s] = special_tokens[sid]
-                    elif include_special == "do_them_only":
-                        for t in ignored_token_ids:
-                            all_weights[t] *= multiplier
-                    else:
-                        for t in target_ids:
-                            all_weights[t] *= multiplier
-                cond_stage_model.transformer.text_model.embeddings.token_embedding.weight = torch.nn.Parameter(all_weights.to(device=device,dtype=cdtype))
-        return clip,
-
 NODE_CLASS_MAPPINGS = {
     "CLIP token injection": ClipTokenLobotomyNode,
-    "CLIP token injection (alt version)": ClipTokenLobotomyAlternativeVersionNode,
     "CLIP take weights from another": replaceCLIPWeights,
     "CLIP level weights": levelCLIPWeights,
     "CLIP turn weights into sign": turnCLIPWeightsIntoSign,
-    "CLIP multiply weights": multiplyTokenNode,
     "CLIP fix nans (can be chained, best at end)": fixCLIPWeights,
     "CLIP save custom tokens": saveCustomTokenNode,
     "CLIP load custom tokens": type("loadCustomTokenNode", (loadCustomTokenNode,), { "IS_WEIGHTED_AVERAGE": False}),
