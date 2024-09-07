@@ -1,6 +1,6 @@
 ## Note:
 
-These nodes are to edit the text weights, so to customize how the prompts will be interpreted.
+These nodes are to edit the text vectors of [CLIP](https://github.com/openai/CLIP) models, so to customize how the prompts will be interpreted.
 
 You could see it as either customisation, "one token prompt" up to some limitation and a way to mess with how the text will be interpreted.
 
