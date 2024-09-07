@@ -49,7 +49,7 @@ class ClipTokenLobotomyNode:
                 "text_add":     ("STRING", {"multiline": True}),
                 "text_sub":     ("STRING", {"multiline": True}),
                 "pos_vs_neg":   ("FLOAT",  {"default": 0.5, "min": 0.0, "max": 1.0, "step": 1/10}),
-                "strength":     ("FLOAT",  {"default": 1.0, "min": 0.0, "max": 1.0, "step": 1/100}),
+                "strength":     ("FLOAT",  {"default": 1.0, "min": 0.0, "max": 1.0, "step": 1/20}),
             }
         }
 
@@ -72,7 +72,8 @@ class ClipTokenLobotomyNode:
                 return t[0]
             if not isinstance(t, torch.Tensor):
                 t = torch.stack(t)
-            return t.sum(dim=0) / t.norm(dim=1, keepdim=True).sum(dim=0)
+            tns = t.norm(dim=1, keepdim=True)
+            return t.mul(tns).sum(dim=0).div(tns.sum(dim=0))
 
         def get_tokens_for_change(text,c,w,j):
             if text == "": return torch.zeros_like(w[0]).to(default_device)
@@ -158,7 +159,7 @@ class loadCustomTokenNode:
             "clip": ("CLIP",),
             "filename": (filenames,)
             }
-        required["loaded_weights_strength"] = ("FLOAT", {"default": 1, "min": .0, "max": 1.0, "step": 1/100})
+        required["strength"] = ("FLOAT", {"default": 1, "min": .0, "max": 1.0, "step": 1/10})
         return {"required": required}
 
     IS_WEIGHTED_AVERAGE = False
@@ -166,7 +167,7 @@ class loadCustomTokenNode:
     CATEGORY = "advanced/token surgery"
     RETURN_TYPES = ("CLIP",)
 
-    def exec(self, clip, filename, loaded_weights_strength):
+    def exec(self, clip, filename, strength):
         c = clip.clone()
         file_path = os.path.join(weights_output_path, f"{filename}.pt")
         custom_weights = torch.load(file_path)
@@ -174,7 +175,7 @@ class loadCustomTokenNode:
             weights_patch, original_weights, _ = get_weights_and_tokenizer(c, k)
             if original_weights is not None:
                 for t in custom_weights[k]:
-                    weights_patch[t] = custom_weights[k][t] * loaded_weights_strength + original_weights[t] * (1 - loaded_weights_strength)
+                    weights_patch[t] = custom_weights[k][t] * strength + original_weights[t] * (1 - strength)
                 c.patcher.add_object_patch(f"clip_{k}.transformer.text_model.embeddings.token_embedding.weight", torch.nn.Parameter(weights_patch.to(default_device)))
         return c,
 
