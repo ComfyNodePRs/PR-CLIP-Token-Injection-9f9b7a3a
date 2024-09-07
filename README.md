@@ -2,7 +2,7 @@
 
 These nodes are to edit the text weights, so to customize how the prompts will be interpreted.
 
-The shared example weights does not contain any "knowledge" but the vector representations of the words affected.
+The shared example weights does not contain any "knowledge" but the vector representations of the words/text affected.
 
 I do not provide any guarantee of result regarding AI safety. This is all experimental.
 
@@ -30,11 +30,15 @@ The node loading them uses a weighted average. 1 meaning full replacement of the
 
 # Potential use case
 
-### Weights customization:
+## Weights customization:
 
-Allows to edit how the text will be interpreted. In cases where you would be prefering something differently. Temporarily or permanently. You could for example combine into realistic "dark noise shadow cinematic photographic" and subtract from it "cgi render rendering rendered videogame videogames cartoon" to help with general realism.
+Allows to edit how the text will be interpreted. In cases where you would be prefering something differently.
 
-### AI Safety:
+Temporarily or permanently.
+
+You could for example combine into realistic "dark noise shadow cinematic photographic" and subtract from it "cgi render rendering rendered videogame videogames cartoon" to help with general realism.
+
+## AI Safety:
 
 **I DO NOT PROVIDE ANY GUARANTEE OF RESULT** nor that any user won't be able to circumvent any modification you may apply.
 
