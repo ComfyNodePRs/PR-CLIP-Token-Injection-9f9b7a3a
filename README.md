@@ -10,6 +10,13 @@ The shared example weights does not contain any image-knowledge but the text vec
 
 You will find them in the category "advanced/token surgery".
 
+Here the words "woman" and "forest" have been affected. As you can see you can shove a lot of meaning in single tokens:
+
+![image_grid](https://github.com/user-attachments/assets/0b06a27a-8d09-4497-a023-f8414632dbe2)
+
+This example is explained further below.
+
+
 # CLIP-Token-Injection
 
 ![image](https://github.com/user-attachments/assets/b4adb747-9cf4-4b56-b7c2-a97acc7fb0c4)
@@ -40,6 +47,20 @@ Temporarily or permanently.
 
 You could for example combine into "realistic" the tokens "dark noise shadow cinematic photographic" and subtract from it "cgi render rendering rendered videogame videogames cartoon" to help with general realism.
 
+### Example
+
+Prompt:
+
+    a woman with long hair in a forest, photography
+
+Here "woman" is being added "pretty perfect love" and subtracted "evil demon ugly" and "forest" is being modified the same way:
+
+![image](https://github.com/user-attachments/assets/45ea18e4-9290-4dea-af7e-6c8f53e2158e)
+
+Same modification strength for both words, In this order: -1 / -0.66 / 0 (base image) / 0.66 / 1 / 1 but fully adding the words to add, without subtracting the negative words (so "pos_vs_neg" at 1):
+
+![image_grid](https://github.com/user-attachments/assets/ae81eed4-cc99-492c-a66c-e17fa45b9763)
+
 ### AI Safety:
 
 > [!CAUTION]
@@ -60,6 +81,11 @@ The child related targeted tokens from the file named "AISafety.pt" are the foll
     one two three four five six seven eight nine ten eleven twelve
 
 Some have been replaced by "Chris" and some by "Hansen". Tokens used by NSFW related terms have mainly been replaced by the token "fbi".
+
+This is what you will obtain if you attempt to prompt for unsafe content with such modification:
+
+![01383UI_00001_](https://github.com/user-attachments/assets/6d60449a-1d50-42ae-9401-6cb25531c6ef)
+
 
 > [!TIP]
 > - Remember, if you are attempting to use many tokens to add and subtract that it will throw it all into single token. Typing the trylogy of the lord of the rings will most likely give you a token without much meaning.
