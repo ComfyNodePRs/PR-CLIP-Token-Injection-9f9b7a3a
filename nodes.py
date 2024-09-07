@@ -1,9 +1,9 @@
 import torch
-import torch.nn.functional as F
 import comfy.model_management as model_management
 import os
 import re
-from math import copysign, pi, sin
+from math import copysign
+
 sign  = lambda x: copysign(1, x)
 clamp = lambda x,vmin,vmax: max(min(x,vmax),vmin)
 fnorm = lambda x, y = True: x / torch.norm(x) if y else x
@@ -41,6 +41,7 @@ tooltips = {
     "pos_vs_neg":"Determins the influence of the positive vs the negative vectors in the final result.\nAt 0 will only subtract what is in the negative.\nAt 1 will only add what is in the positive.\nIf any of the text inputs is empty this slider becomes useless.\nGenerally better above 0.5",
     "strength":"-1 will reverse positive vs negative\n 0 is disabled\n 1 fully replaces the targeted tokens by the result"
 }
+
 class ClipTokenLobotomyNode:
     def __init__(self):
         pass
@@ -53,7 +54,7 @@ class ClipTokenLobotomyNode:
                 "text_add":     ("STRING", {"multiline": True}),
                 "text_sub":     ("STRING", {"multiline": True}),
                 "pos_vs_neg":   ("FLOAT",  {"default": 0.5, "min":  0.0, "max": 1.0, "step": 1/10, "tooltip":tooltips["pos_vs_neg"]}),
-                "strength":     ("FLOAT",  {"default": 1.0, "min": -1.0, "max": 1.0, "step": 1/20, "tooltip":tooltips["strength"]}),
+                "strength":     ("FLOAT",  {"default": 1.0, "min": -1.0, "max": 1.0, "step": 1/10, "tooltip":tooltips["strength"]}),
             }
         }
 
@@ -68,6 +69,7 @@ class ClipTokenLobotomyNode:
             return clip,
 
         c = clip.clone()
+        strength = sign(strength) * abs(strength) ** (1 / 2)
         pvsn = clamp(pos_vs_neg + ne(text_add) - ne(text_sub), 0, 1)
         s_mul = (2 - abs(0.5 - pvsn) / 0.5)
 
