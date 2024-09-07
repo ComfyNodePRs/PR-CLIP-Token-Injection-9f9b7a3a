@@ -51,7 +51,7 @@ The file named "naked_little_girl_example.png" shows you how to load these weigh
 
 I can not share the full list of words used as even pastebin thinks that I'm trying to share CP.
 
-The child related targeted tokens are the following:
+The child related targeted tokens from the file named "AISafety.pt" are the following:
 
     girl teen teens teenager boy toddlers children infant infants baby babies kid kiddo yo years old
     1 2 3 4 5 6 7 8 9 0
